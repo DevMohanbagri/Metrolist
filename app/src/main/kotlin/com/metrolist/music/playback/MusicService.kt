@@ -204,6 +204,9 @@ import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.playback.queues.YouTubePlaylistQueue
 import com.metrolist.music.playback.queues.filterExplicit
 import com.metrolist.music.playback.queues.filterVideoSongs
+import com.metrolist.music.recommendation.ListeningFeedbackStore
+import com.metrolist.music.recommendation.PersonalizedRadio
+import com.metrolist.music.recommendation.isEarlySkip
 import com.metrolist.music.constants.LoudnessLevel
 import com.metrolist.music.constants.LoudnessLevelKey
 import com.metrolist.music.utils.CoilBitmapLoader
@@ -269,6 +272,12 @@ class MusicService :
     PlaybackStatsListener.Callback {
     @Inject
     lateinit var database: MusicDatabase
+
+    @Inject
+    lateinit var listeningFeedbackStore: ListeningFeedbackStore
+
+    @Inject
+    lateinit var personalizedRadio: PersonalizedRadio
 
     @Inject
     lateinit var lyricsHelper: LyricsHelper
@@ -1788,10 +1797,11 @@ class MusicService :
         scope.launch(SilentHandler) {
             val initialStatus =
                 withContext(Dispatchers.IO) {
-                    queue
+                    val status = queue
                         .getInitialStatus()
                         .filterExplicit(dataStore.get(HideExplicitKey, false))
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                    if (queue is YouTubeQueue && queue.isRadio) personalizeRadioStatus(status) else status
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
             if (initialStatus.title != null) {
@@ -1840,6 +1850,15 @@ class MusicService :
         originalQueueSize = initialQueueSize
     }
 
+    internal suspend fun personalizeRadioStatus(status: Queue.Status): Queue.Status {
+        if (status.items.size < 2) return status
+        val currentIndex = status.mediaItemIndex.coerceIn(0, status.items.lastIndex)
+        val before = status.items.take(currentIndex)
+        val current = status.items[currentIndex]
+        val after = personalizedRadio.rank(status.items.drop(currentIndex + 1))
+        return status.copy(items = before + current + after)
+    }
+
     fun startRadioSeamlessly() {
         if (!playerInitialized.value) {
             Timber.tag(TAG).w("startRadioSeamlessly called before player initialization")
@@ -1864,10 +1883,13 @@ class MusicService :
             try {
                 val initialStatus =
                     withContext(Dispatchers.IO) {
-                        radioQueue
+                        val status = radioQueue
                             .getInitialStatus()
                             .filterExplicit(dataStore.get(HideExplicitKey, false))
                             .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        status.copy(
+                            items = personalizedRadio.rank(status.items.filter { it.mediaId != currentMediaId }),
+                        )
                     }
 
                 if (initialStatus.title != null) {
@@ -2584,10 +2606,12 @@ class MusicService :
             scope.launch(SilentHandler) {
                 val mediaItems =
                     withContext(Dispatchers.IO) {
-                        currentQueue
+                        val queue = currentQueue
+                        val items = queue
                             .nextPage()
                             .filterExplicit(cachedHideExplicit)
                             .filterVideoSongs(cachedHideVideoSongs)
+                        if (queue is YouTubeQueue && queue.isRadio) personalizedRadio.rank(items) else items
                     }
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)
@@ -4804,7 +4828,25 @@ class MusicService :
         reason: Int,
     ) {
         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+            recordEarlySkip(oldPosition, newPosition)
             scheduleCrossfade()
+        }
+    }
+
+    private fun recordEarlySkip(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+    ) {
+        if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) return
+        val metadata = oldPosition.mediaItem?.metadata ?: return
+        if (metadata.isEpisode) return
+
+        scope.launch(Dispatchers.IO) {
+            if (dataStore.get(PauseListenHistoryKey, false)) return@launch
+            val historyThresholdMs = (dataStore[HistoryDuration]?.times(1000f) ?: 30_000f).toLong()
+            if (isEarlySkip(oldPosition.positionMs, metadata.duration, historyThresholdMs)) {
+                listeningFeedbackStore.recordSkip(metadata.id, System.currentTimeMillis())
+            }
         }
     }
 
