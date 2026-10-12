@@ -17,6 +17,8 @@ import com.metrolist.music.db.InternalDatabase
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.listentogether.ListenTogetherClient
 import com.metrolist.music.listentogether.ListenTogetherManager
+import com.metrolist.music.recommendation.FileListeningFeedbackStore
+import com.metrolist.music.recommendation.ListeningFeedbackStore
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import dagger.Module
@@ -57,6 +59,12 @@ object AppModule {
     fun provideDatabase(
         internalDatabase: InternalDatabase,
     ): MusicDatabase = MusicDatabase(internalDatabase)
+
+    @Singleton
+    @Provides
+    fun provideListeningFeedbackStore(
+        @ApplicationContext context: Context,
+    ): ListeningFeedbackStore = FileListeningFeedbackStore(context.filesDir.resolve("listening_feedback.tsv"))
 
     @Singleton
     @Provides
