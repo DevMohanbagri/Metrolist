@@ -1859,7 +1859,7 @@ class MusicService :
         return status.copy(items = before + current + after)
     }
 
-    fun startRadioSeamlessly() {
+    fun startRadioSeamlessly(resumeWhenEnded: Boolean = false) {
         if (!playerInitialized.value) {
             Timber.tag(TAG).w("startRadioSeamlessly called before player initialization")
             return
@@ -1917,6 +1917,9 @@ class MusicService :
                         val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                         applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
                     }
+                    if (resumeWhenEnded) {
+                        resumePlaybackAfterRadioAdded(currentMediaId, currentIndex)
+                    }
                 }
 
                 currentQueue = radioQueue
@@ -1952,6 +1955,9 @@ class MusicService :
                                         cachedShufflePlaylistFirst,
                                     )
                                 }
+                                if (resumeWhenEnded) {
+                                    resumePlaybackAfterRadioAdded(currentMediaId, currentIndex)
+                                }
                             }
                         }
                     }
@@ -1959,6 +1965,18 @@ class MusicService :
                 }
             }
         }
+    }
+
+    private fun resumePlaybackAfterRadioAdded(
+        expectedMediaId: String,
+        currentIndex: Int,
+    ) {
+        if (!player.playWhenReady || player.currentMediaItem?.mediaId != expectedMediaId) return
+        val nextIndex = currentIndex + 1
+        if (nextIndex >= player.mediaItemCount) return
+        player.seekTo(nextIndex, 0L)
+        player.prepare()
+        player.play()
     }
 
     fun getAutomix(playlistId: String) {
@@ -2649,6 +2667,17 @@ class MusicService :
             }
 
             val repeatMode = player.repeatMode
+
+            val endedQueue = currentQueue
+            val isStandaloneSong =
+                endedQueue is ListQueue &&
+                    endedQueue.items.size == 1 &&
+                    player.mediaItemCount == 1 &&
+                    player.currentMediaItem?.metadata?.isEpisode != true
+            if (player.playWhenReady && cachedAutoplay && repeatMode == REPEAT_MODE_OFF && isStandaloneSong) {
+                startRadioSeamlessly(resumeWhenEnded = true)
+                return
+            }
 
             if (player.playWhenReady && repeatMode == REPEAT_MODE_ALL && player.mediaItemCount > 0) {
                 player.seekTo(0, 0)
