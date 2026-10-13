@@ -1,6 +1,9 @@
 name: Build PR
 
 on:
+  push:
+    branches:
+      - feat/active-radio-single-song-autoplay
   pull_request:
     branches:
       - "**"
@@ -14,7 +17,7 @@ on:
       - "fastlane/**"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.number }}
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,7 +48,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: app/pr-debug.keystore
-          key: pr-debug-keystore-${{ github.event.number }}
+          key: pr-debug-keystore-${{ github.event.number || github.run_id }}
 
       - name: Generate PR debug keystore if not cached
         if: steps.pr_keystore.outputs.cache-hit != 'true'
@@ -71,8 +74,8 @@ jobs:
         run: ./gradlew --console=plain assembleGmsDebug --warning-mode summary
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
-          METROLIST_APPLICATION_ID: com.metrolist.music.pr.p${{ github.event.number }}
-          METROLIST_APP_NAME: Metrolist PR ${{ github.event.number }}
+          METROLIST_APPLICATION_ID: com.metrolist.music.pr.p${{ github.event.number || github.run_number }}
+          METROLIST_APP_NAME: Metrolist Active Radio ${{ github.event.number || 'Autoplay' }}
           METROLIST_DEBUG_KEYSTORE_PATH: pr-debug.keystore
           PULL_REQUEST: "true"
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
@@ -81,5 +84,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: app-universal-debug-pr-${{ github.event.number }}
+          name: app-universal-debug-${{ github.event.number || github.run_number }}
           path: app/build/outputs/apk/gms/debug/*.apk
