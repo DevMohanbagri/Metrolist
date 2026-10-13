@@ -844,6 +844,7 @@ constructor(
                                     .getInitialStatus()
                                     .filterExplicit(context.dataStore.get(HideExplicitKey, false))
                                     .filterVideoSongs(context.dataStore.get(HideVideoSongsKey, false))
+                                    .let { service.personalizeRadioStatus(it) }
                             }
                         }.getOrNull()
 

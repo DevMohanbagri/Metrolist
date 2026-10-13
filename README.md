@@ -169,6 +169,12 @@
   </tr>
 </table>
 
+<h2>Personal Test Build: Active Radio</h2>
+
+<p>This GMS debug APK includes the active-radio recommendation changes from this fork's feature branch. It is a test build, not an official Metrolist release. Its separate package ID lets it install alongside the stable app.</p>
+
+<p><a href="https://raw.githubusercontent.com/DevMohanbagri/Metrolist/feat/active-radio-recommendations/downloads/Metrolist-active-radio-debug.apk">Download the Active Radio APK</a> (about 54 MB).</p>
+
 <h2>Nightly Build</h2>
 
 <table>
