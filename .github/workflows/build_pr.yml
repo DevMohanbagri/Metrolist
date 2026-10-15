@@ -24,6 +24,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v7
@@ -86,3 +88,15 @@ jobs:
         with:
           name: app-universal-debug-${{ github.event.number || github.run_number }}
           path: app/build/outputs/apk/gms/debug/*.apk
+
+      - name: Publish APK to feature branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/active-radio-single-song-autoplay'
+        run: |
+          mkdir -p downloads
+          cp app/build/outputs/apk/gms/debug/*.apk downloads/Metrolist-active-radio-single-song-autoplay.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/Metrolist-active-radio-single-song-autoplay.apk README.md
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: publish active radio autoplay APK [skip ci]"
+          git push
